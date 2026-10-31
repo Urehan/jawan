@@ -180,8 +180,8 @@ def get_languages():
 
 @st.cache_resource
 def load_whisper():
-    # "small" accuracy aur speed ka acha balance hai (CPU par)
-    return WhisperModel("small", device="cpu", compute_type="int8")
+    # "medium" Urdu ke liye behtar hai. CPU par slow ho to "small" par wapas jayein.
+    return WhisperModel("medium", device="cpu", compute_type="int8")
 
 
 def wav_to_16k_mono(audio_bytes):
@@ -212,7 +212,19 @@ def wav_to_16k_mono(audio_bytes):
             data,
         )
 
+    # Awaz ko normalize karein, taake dheemi awaz bhi saaf sunai de
+    peak = np.max(np.abs(data)) if data.size else 0
+    if peak > 0:
+        data = data / peak * 0.95
+
     return data.astype(np.float32)
+
+
+# Whisper ko language ka context dene wale prompts
+INITIAL_PROMPTS = {
+    "ur": "یہ اردو زبان میں گفتگو ہے۔",
+    "ms": "Ini ialah perbualan dalam Bahasa Melayu.",
+}
 
 
 @st.cache_data(show_spinner=False)
@@ -222,8 +234,11 @@ def transcribe(audio_bytes, lang_code):
     segments, _ = model.transcribe(
         audio_array,
         language=lang_code,
-        beam_size=1,
+        beam_size=5,
+        initial_prompt=INITIAL_PROMPTS.get(lang_code),
         vad_filter=True,
+        vad_parameters={"min_silence_duration_ms": 500},
+        condition_on_previous_text=False,
     )
     return " ".join(seg.text.strip() for seg in segments)
 
